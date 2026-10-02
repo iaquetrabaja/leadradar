@@ -77,7 +77,7 @@ Ejemplos listos (generados exactamente así): [`examples/seo.yaml`](examples/seo
 Necesitas Python 3.10+.
 
 ```bash
-git clone https://github.com/Daaviid3792/leadradar && cd leadradar
+git clone https://github.com/iaquetrabaja/leadradar && cd leadradar
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[stealth]"
 

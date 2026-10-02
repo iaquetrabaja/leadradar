@@ -8,7 +8,7 @@ from pathlib import Path
 
 from leadradar import __version__
 
-REPO = "https://github.com/Daaviid3792/leadradar"
+REPO = "https://github.com/iaquetrabaja/leadradar"
 
 
 def _example(name: str) -> Path | None:
