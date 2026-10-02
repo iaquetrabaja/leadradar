@@ -28,7 +28,6 @@ from leadradar.models import Item
 
 log = logging.getLogger("leadradar")
 
-RUN = "https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
 
 
 def _linkedin_window(since: datetime) -> str:
@@ -77,7 +76,8 @@ PRESETS = {
     "reddit": {
         "actor": "trudax/reddit-scraper-lite",
         "input": lambda conf, ctx: {
-            "searches": ctx.queries,
+            # Quoted = exact phrase; unquoted Reddit search matches almost anything.
+            "searches": [q if q.startswith('"') else f'"{q}"' for q in ctx.queries],
             "sort": "new",
             "time": _reddit_window(ctx.since),
             "maxItems": conf.get("max_per_query", 25) * len(ctx.queries),
@@ -139,16 +139,32 @@ def _parse_date(value) -> datetime | None:
     return None
 
 
-def _run_actor(actor: str, payload: dict, token: str) -> list[dict]:
+def _run_actor(actor: str, payload: dict, token: str, max_wait: int = 480) -> list[dict]:
+    """Start the actor, wait up to `max_wait` s, and return its dataset — even if it is
+    still running (slow scrapers like Reddit's), in which case it is aborted to stop billing."""
+    api = "https://api.apify.com/v2"
+    headers = {"Authorization": f"Bearer {token}"}  # not in the URL, so it can't leak into error logs
     resp = net.client().post(
-        RUN.format(actor=actor.replace("/", "~")),
-        params={"timeout": 240},
-        headers={"Authorization": f"Bearer {token}"},  # not in the URL, so it can't leak into error logs
-        json=payload,
-        timeout=300,
+        f"{api}/acts/{actor.replace('/', '~')}/runs", params={"waitForFinish": 60}, headers=headers, json=payload, timeout=90
     )
     resp.raise_for_status()
-    data = resp.json()
+    run = resp.json()["data"]
+    waited = 60
+    while run["status"] in ("READY", "RUNNING") and waited < max_wait:
+        resp = net.client().get(f"{api}/actor-runs/{run['id']}", params={"waitForFinish": 60}, headers=headers, timeout=90)
+        resp.raise_for_status()
+        run = resp.json()["data"]
+        waited += 60
+    if run["status"] in ("READY", "RUNNING"):
+        log.info("apify: %s still running after %ds — using partial results", actor, max_wait)
+        net.client().post(f"{api}/actor-runs/{run['id']}/abort", headers=headers, timeout=30)
+    elif run["status"] != "SUCCEEDED":
+        log.warning("apify: %s ended with %s — using whatever it collected", actor, run["status"])
+    items = net.client().get(
+        f"{api}/datasets/{run['defaultDatasetId']}/items", params={"clean": "true"}, headers=headers, timeout=90
+    )
+    items.raise_for_status()
+    data = items.json()
     return data if isinstance(data, list) else []
 
 
@@ -171,7 +187,7 @@ def collect(conf: dict, ctx) -> list[Item]:
             payloads = [_fill(tmpl, ctx.queries, q) for q in ctx.queries] if per_query else [_fill(tmpl, ctx.queries, None)]
         for payload in payloads:
             try:
-                rows = _run_actor(actor, payload, token)
+                rows = _run_actor(actor, payload, token, conf.get("max_wait_seconds", 480))
             except Exception as e:
                 log.warning("apify: %s failed: %s", actor, e)
                 continue

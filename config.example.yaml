@@ -75,6 +75,7 @@ sources:
   apify:
     enabled: true
     max_per_query: 10
+    max_wait_seconds: 480  # per actor; slow ones (Reddit ~2 min) return partial results if over
     x_lang: ""           # e.g. es — restrict X results to one language
     queries: ["busco automatizar", "recomendáis automatización", "necesito chatbot", "looking for automation expert", "need help n8n"]
     actors:
