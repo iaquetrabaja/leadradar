@@ -130,8 +130,16 @@ sources:
       #   stealth: false   # true = stealth browser (Cloudflare); run `scrapling install` first
 
 scoring:
-  model: claude-haiku-4-5  # cheapest (~$0.005 per 15 posts). claude-sonnet-5-5 / claude-opus-5-5 write sharper drafts
-  effort: low              # Sonnet/Opus only: low | medium | high
+  # Which AI reads and scores the posts. Put the matching key in .env / GitHub secrets.
+  #   anthropic → ANTHROPIC_API_KEY  (default model claude-haiku-4-5)
+  #   openai    → OPENAI_API_KEY     (default model gpt-5-mini)
+  #   gemini    → GEMINI_API_KEY     (default model gemini-3.8-flash)
+  #   openai_compatible → LLM_API_KEY + base_url (OpenRouter, Groq, Together, local Ollama…)
+  provider: anthropic
+  model: ""                # empty = provider default. Sharper drafts: claude-sonnet-5-5, gpt-5, gemini-3-pro…
+  base_url: ""             # only for openai_compatible, e.g. https://openrouter.ai/api/v1
+  effort: low              # reasoning effort where supported: minimal | low | medium | high
+  # price: [0.25, 2.0]     # optional $ per 1M tokens (input, output) to show cost for unlisted models
   batch_size: 15           # posts per Claude call
   max_items_per_run: 100   # cost cap; extra items wait for the next run
 

@@ -1,8 +1,8 @@
 # 📡 LeadRadar
 
-**Encuentra a gente que está pidiendo justo lo que tú vendes — en LinkedIn, X, Reddit, Workana, Freelancer.com, Hacker News, Bluesky y cualquier web que le indiques. Claude lee cada publicación, puntúa la intención real de compra, te escribe un primer mensaje útil y te avisa por Telegram.**
+**Encuentra a gente que está pidiendo justo lo que tú vendes — en LinkedIn, X, Reddit, Workana, Freelancer.com, Hacker News, Bluesky y cualquier web que le indiques. La IA (Claude, ChatGPT o Gemini) lee cada publicación, puntúa la intención real de compra, te escribe un primer mensaje útil y te avisa por Telegram.**
 
-> 🇬🇧 [Read in English](README.md)
+> 🇬🇧 [Read in English](README.md) · 📘 **[Guía paso a paso con capturas](docs/GUIA.md)** — sin instalar nada
 
 ```
  fuentes ──► solo recientes ──► sin duplicados ──► Claude puntúa intención ──► Telegram / Discord / Slack
@@ -14,13 +14,14 @@
 - **Solo borradores, nunca envía nada solo.** Tú decides qué sale.
 - **Sin baneos.** A LinkedIn, X y Reddit se llega con actores de Apify sin cookies — nunca con tu sesión.
 - **Cualquier oficio.** `leadradar init --describe "SEO freelance para tiendas Shopify"` te escribe la configuración.
-- **Barato y sin servidor.** ~0,09 $ de Claude por cada 100 publicaciones, gratis en GitHub Actions.
+- **Elige tu IA.** Claude (por defecto), ChatGPT, Gemini o cualquier API compatible con OpenAI (OpenRouter, Groq, Ollama…).
+- **Barato y sin servidor.** ~0,10 $ de IA por cada 100 publicaciones, gratis en GitHub Actions.
 
 ## Claves de API — las mínimas
 
 | Clave | ¿Hace falta? | Para qué | Dónde se saca | Coste |
 |---|---|---|---|---|
-| `ANTHROPIC_API_KEY` | **Obligatoria** | Claude puntúa y redacta | [console.anthropic.com](https://console.anthropic.com) → API keys | ~0,09 $ por 100 publicaciones (Haiku) |
+| **Una clave de IA:** `ANTHROPIC_API_KEY` *o* `OPENAI_API_KEY` *o* `GEMINI_API_KEY` | **Obligatoria** | Lee, puntúa y redacta (pon `scoring.provider` a juego) | [Claude](https://console.anthropic.com/settings/keys) · [OpenAI](https://platform.openai.com/api-keys) · [Gemini](https://aistudio.google.com/apikey) | ~0,10 $ por 100 publicaciones (Claude Haiku) |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | **Obligatoria** (o Discord/Slack) | Donde te llegan los leads | @BotFather en Telegram y luego `leadradar telegram-setup` | Gratis |
 | `APIFY_API_TOKEN` | Recomendada | **LinkedIn + X + Reddit** con una sola clave, sin cookies | [apify.com](https://apify.com) → Settings → API & Integrations | Pago por resultado, con crédito gratis mensual; ~0,10–0,30 $ por pasada con los valores por defecto |
 | `SERPER_API_KEY` | Opcional | Fuente `web`: Quora, Indie Hackers, foros vía Google | [serper.dev](https://serper.dev) | 2.500 búsquedas gratis |
@@ -30,17 +31,9 @@ Solo con las dos obligatorias ya tienes **Workana, Freelancer.com, Hacker News y
 
 ## Cómo se ve
 
-Cada lead llega a Telegram como una tarjeta:
+Cada lead llega a Telegram como una tarjeta — puntuación, qué necesita, por qué encaja, presupuesto, borrador desplegable y botón "Abrir publicación":
 
-```
-92/100 · 🎯 Busca proveedor · workana
-Hostal busca agente n8n para reservas por WhatsApp, Gmail e Instagram
-📝 Hostal pequeño quiere responder reservas automáticamente por WhatsApp, Gmail e Instagram.
-💡 Automatización de WhatsApp + email para un pequeño negocio: encaja de lleno.
-💰 USD 250 - 500
-Borrador de respuesta ▸ (toca para desplegar)
-[ Abrir publicación ]
-```
+<img src="docs/img/06-telegram-real.png" width="420" alt="Avisos reales de LeadRadar en Telegram (nombres difuminados)">
 
 …y en cada pasada se genera `output/leads.html`: una página con filtros y botón de "copiar borrador".
 
@@ -116,13 +109,14 @@ Todo está en `config.yaml` — el [ejemplo](config.example.yaml) está comentad
 - **`queries`** — frases que escriben de verdad tus clientes (*"busco a alguien que automatice"*, *"recomendáis alguna agencia de IA"*). Las APIs por palabra clave (Bluesky, HN, Workana…) funcionan mejor con sus propias `queries` cortas; Claude filtra la intención después.
 - **`max_age_hours`** — 72 por defecto. Pon 24 si lo ejecutas a diario y solo quieres lo de hoy.
 - **`notify.min_score`** — 60 por defecto. Las reglas fijas limitan a los vendedores a 30 y la charla sobre el tema a 55, así que todo lo ≥ 60 es un comprador pidiendo ayuda explícitamente; súbelo a 75–85 para solo lo más caliente.
-- **`scoring.model`** — `claude-haiku-4-5` por defecto: medido en **~0,09 $ por 100 publicaciones**. `claude-sonnet-5-5` o `claude-opus-5-5` escriben borradores más finos por unas 3–4 veces más. `max_items_per_run` limita el gasto, y cada pasada muestra tokens y coste estimado.
+- **`scoring.provider`** — `anthropic` (por defecto), `openai`, `gemini` u `openai_compatible` (+ `base_url`). Mira [la guía](docs/GUIA.md#10-cambiar-de-ia).
+- **`scoring.model`** — vacío = el modelo barato de cada proveedor (`claude-haiku-4-5`, `gpt-5-mini`, `gemini-3.8-flash`). Claude Haiku: medido en **~0,09 $ por 100 publicaciones**. `claude-sonnet-5-5` o `claude-opus-5-5` escriben borradores más finos por unas 3–4 veces más. `max_items_per_run` limita el gasto, y cada pasada muestra tokens y coste estimado.
 
 Si existe `config.local.yaml` (ignorado por git) tiene prioridad sobre `config.yaml` — útil para pruebas en local.
 
 ## Cómo puntúa
 
-Las publicaciones van a Claude por lotes con tu oferta en el prompt de sistema. Claude devuelve JSON estructurado por publicación (validado con Pydantic): si el autor es **comprador o vendedor** y si **pide ayuda explícitamente** (los vendedores se limitan a 30 y la charla sobre el tema a 55, así que nunca se avisan), `score` (0–100), `intent` (busca proveedor / herramienta / pregunta cómo / frustrado / oferta de trabajo), un resumen y un motivo de una línea en tu idioma, y — si es lead — un borrador **en el idioma de la publicación** que empieza aportando algo útil en vez de vender. El contenido de las publicaciones se trata como datos no fiables (se ignoran instrucciones escritas dentro).
+Las publicaciones van a la IA por lotes con tu oferta en el prompt de sistema. El modelo devuelve JSON estructurado por publicación (validado con Pydantic): si el autor es **comprador o vendedor** y si **pide ayuda explícitamente** (los vendedores se limitan a 30 y la charla sobre el tema a 55, así que nunca se avisan), `score` (0–100), `intent` (busca proveedor / herramienta / pregunta cómo / frustrado / oferta de trabajo), un resumen y un motivo de una línea en tu idioma, y — si es lead — un borrador **en el idioma de la publicación** que empieza aportando algo útil en vez de vender. El contenido de las publicaciones se trata como datos no fiables (se ignoran instrucciones escritas dentro).
 
 ## Úsalo con cabeza
 

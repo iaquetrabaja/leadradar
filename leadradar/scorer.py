@@ -1,24 +1,18 @@
-"""Claude reads each candidate and decides: is this a real person who needs what
-I sell, how hot is it, and what would a helpful first reply look like?"""
+"""The LLM (Claude by default, or OpenAI/Gemini) reads each candidate and decides: is
+this a real person who needs what I sell, how hot is it, and what would a helpful
+first reply look like?"""
 
 from __future__ import annotations
 
 import logging
 from typing import Literal
 
-import anthropic
 from pydantic import BaseModel, Field
 
+from leadradar.llm import LLM, RateLimited
 from leadradar.models import Item, Lead
 
 log = logging.getLogger("leadradar")
-
-# USD per million tokens (input, output, cache read) — for the cost estimate in logs only.
-PRICES = {
-    "claude-opus-5-5": (4.0, 20.0, 0.20),
-    "claude-sonnet-5-5": (2.0, 10.0, 0.20),
-    "claude-haiku-4-5": (1.0, 5.0, 0.10),
-}
 
 
 class Verdict(BaseModel):
@@ -29,6 +23,7 @@ class Verdict(BaseModel):
     explicit_request: bool = Field(
         description="true only if the author explicitly asks for a provider, freelancer, recommendation or help with a concrete need"
     )
+    fits_offer: bool = Field(description="true only if the need is something the offer actually covers")
     is_lead: bool
     score: int = Field(description="0-100 purchase intent × fit")
     intent: Literal["seeking_provider", "seeking_tool", "asking_how", "frustrated", "job_post", "not_relevant"]
@@ -69,6 +64,9 @@ Then set `explicit_request`: true only when the author clearly asks for someone,
 recommendation or help with a concrete need of their own. Opinions, news, tips, tutorials,
 case studies, "here's how I did it" posts, hiring announcements for full-time staff and
 general discussion are NOT requests, even if on topic.
+Then set `fits_offer`: true only if what they need is something the offer actually covers —
+a request for unrelated help (installing Windows, designing a logo for an automation
+consultant…) is a request, but not a fit.
 
 Scoring (0-100):
 - 85-100: explicitly asking for a provider, freelancer, agency or paid help that matches the offer; recent; reachable.
@@ -81,8 +79,9 @@ Write `summary` and `why` in {profile.get('report_language', 'en')}, one short l
 
 For leads, write `draft`: a first reply the professional could post or DM, in the SAME language
 as the post. Tone: {profile.get('tone', 'friendly and concise')}. Rules for the draft:
-- Lead with something genuinely useful for their specific situation (a tip, a question that
-  shows understanding, a concrete next step). No generic pitch, no "I came across your post".
+- Open with something genuinely useful for their specific situation (a tip, a question that
+  shows understanding, a concrete next step). Never open by talking about yourself ("I'm an
+  expert", "es mi especialidad", "I came across your post") — the first sentence is about them.
 - Mention what you do in one sentence at most, and offer a low-friction next step.
 - 2-5 sentences, plain text, no hashtags, no emojis unless the post uses them.
 - Never invent facts, prices, case studies or credentials.
@@ -94,9 +93,7 @@ Return one result per item, using its [n] index."""
 
 class Scorer:
     def __init__(self, profile: dict, scoring: dict):
-        self.client = anthropic.Anthropic()
-        self.model = scoring["model"]
-        self.effort = scoring.get("effort", "low")
+        self.llm = LLM(scoring)
         self.batch_size = scoring.get("batch_size", 15)
         self.system = build_system(profile)
         self.usage = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
@@ -104,57 +101,27 @@ class Scorer:
         # to network/auth errors, which say nothing about the items themselves.
         self.rejected: list[Item] = []
 
-    def _model_options(self) -> dict:
-        """Effort and server-side fallback only exist on the newer models (not Haiku 4.5)."""
-        if self.model.startswith("claude-haiku"):
-            return {}
-        return {
-            "output_config": {"effort": self.effort},
-            # If a safety classifier declines, retry on Anthropic's recommended fallback model.
-            "betas": ["server-side-fallback-2026-07-01"],
-            "fallbacks": "default",
-        }
-
     def cost(self) -> float | None:
-        if self.model not in PRICES:
-            return None
-        pin, pout, pcache = PRICES[self.model]
-        u = self.usage
-        return (
-            (u["input"] + u["cache_write"] * 1.25) * pin + u["output"] * pout + u["cache_read"] * pcache
-        ) / 1e6
+        return self.llm.cost(self.usage)
 
     def _score_batch(self, batch: list[Item]) -> list[Lead]:
         listing = "\n\n".join(f"[{i}]\n{it.as_prompt()}" for i, it in enumerate(batch))
-        response = self.client.beta.messages.parse(
-            model=self.model,
-            max_tokens=16000,
-            # Frozen system prompt -> cached across batches and runs.
-            system=[{"type": "text", "text": self.system, "cache_control": {"type": "ephemeral"}}],
-            messages=[{"role": "user", "content": f"Evaluate these {len(batch)} items:\n\n{listing}"}],
-            output_format=Verdicts,
-            **self._model_options(),
-        )
-        u = response.usage
-        self.usage["input"] += u.input_tokens
-        self.usage["output"] += u.output_tokens
-        self.usage["cache_read"] += u.cache_read_input_tokens or 0
-        self.usage["cache_write"] += u.cache_creation_input_tokens or 0
-        if response.stop_reason == "refusal":
-            log.warning("scorer: batch declined (%s), skipping %d items", response.stop_details, len(batch))
-            self.rejected += batch
-            return []
-        if response.stop_reason == "max_tokens" or response.parsed_output is None:
-            log.warning("scorer: unusable response (%s), skipping %d items", response.stop_reason, len(batch))
+        result = self.llm.parse(self.system, f"Evaluate these {len(batch)} items:\n\n{listing}", Verdicts)
+        for k, v in result.usage.items():
+            self.usage[k] += v
+        if result.stop != "ok":
+            log.warning("scorer: %s response (%s), skipping %d items", result.stop, result.detail, len(batch))
             self.rejected += batch
             return []
         leads = []
-        for v in response.parsed_output.results:
+        for v in result.parsed.results:
             # Hard rules on top of the model's score: only people asking for help can be leads.
             if v.author_role != "buyer":  # vendors self-promoting, news, commentary
                 v.score, v.is_lead = min(v.score, 30), False
             elif not v.explicit_request:  # on-topic but not asking for anything
                 v.score, v.is_lead = min(v.score, 55), False
+            elif not v.fits_offer:  # asking for help, but with something you don't sell
+                v.score, v.is_lead = min(v.score, 50), False
             if 0 <= v.index < len(batch):
                 leads.append(
                     Lead(
@@ -172,18 +139,17 @@ class Scorer:
         return leads
 
     def score(self, items: list[Item]) -> list[Lead]:
+        log.info("scoring with %s", self.llm.describe())
         leads: list[Lead] = []
         for i in range(0, len(items), self.batch_size):
             batch = items[i : i + self.batch_size]
             try:
                 leads += self._score_batch(batch)
-            except anthropic.RateLimitError:
+            except RateLimited:
                 log.warning("scorer: rate limited, stopping early (%d scored)", len(leads))
                 break
-            except anthropic.APIStatusError as e:
-                log.warning("scorer: API error %s on batch, skipping: %s", e.status_code, e.message)
-            except Exception as e:  # timeouts, connection drops, malformed output
-                log.warning("scorer: batch failed (%s: %s), skipping", type(e).__name__, e)
+            except Exception as e:  # API errors, timeouts, connection drops, malformed output
+                log.warning("scorer: batch failed (%s: %s), skipping", type(e).__name__, str(e)[:300])
             log.info("scored %d/%d", min(i + self.batch_size, len(items)), len(items))
         cost = self.cost()
         log.info(

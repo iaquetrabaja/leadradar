@@ -45,8 +45,10 @@ DEFAULTS: dict = {
         "scrape": {"enabled": False, "pages": []},
     },
     "scoring": {
-        "model": "claude-haiku-4-5",  # cheapest; claude-sonnet-5-5 / claude-opus-5-5 for sharper drafts
-        "effort": "low",  # used by Sonnet/Opus only
+        "provider": "anthropic",  # anthropic | openai | gemini | openai_compatible
+        "model": "",  # empty = the provider's cheap default (claude-haiku-4-5, gpt-5-mini, gemini-3.8-flash)
+        "base_url": "",  # openai_compatible only
+        "effort": "low",
         "batch_size": 15,
         "max_items_per_run": 150,
     },

@@ -38,9 +38,9 @@ def cmd_init(args) -> None:
         from leadradar.generator import dump, generate
 
         load_env()
-        if not env("ANTHROPIC_API_KEY"):
-            sys.exit("Add your ANTHROPIC_API_KEY to .env first (console.anthropic.com), then re-run this command.")
-        print("Asking Claude to tailor the config to your business…")
+        if not (env("ANTHROPIC_API_KEY") or env("OPENAI_API_KEY") or env("GEMINI_API_KEY")):
+            sys.exit("Add an AI key to .env first — ANTHROPIC_API_KEY, OPENAI_API_KEY or GEMINI_API_KEY — then re-run this command.")
+        print("Asking the AI to tailor the config to your business…")
         example = yaml.safe_load(example_path.read_text(encoding="utf-8"))
         target.write_text(dump(generate(args.describe, example), args.describe), encoding="utf-8")
     else:

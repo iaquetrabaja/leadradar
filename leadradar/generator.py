@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import copy
 
-import anthropic
 import yaml
 from pydantic import BaseModel, Field
 
@@ -53,21 +52,17 @@ class Generated(BaseModel):
     workana: bool
 
 
-def generate(description: str, example: dict, model: str = "claude-opus-5-5") -> dict:
-    client = anthropic.Anthropic()
-    response = client.beta.messages.parse(
-        model=model,
-        max_tokens=8000,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": f"<business>\n{description.strip()}\n</business>"}],
-        output_format=Generated,
-        output_config={"effort": "medium"},
-        betas=["server-side-fallback-2026-07-01"],
-        fallbacks="default",
-    )
-    if response.stop_reason == "refusal" or response.parsed_output is None:
-        raise SystemExit(f"Could not generate a config ({response.stop_reason}). Try rephrasing, or edit config.example.yaml by hand.")
-    g = response.parsed_output
+def generate(description: str, example: dict, provider: str | None = None) -> dict:
+    from leadradar.llm import LLM, detect_provider
+
+    provider = provider or detect_provider()
+    # One-off call: use the provider's stronger default (accuracy matters more than cost here).
+    strong = {"anthropic": "claude-opus-5-5", "openai": "gpt-5-mini", "gemini": "gemini-3.8-flash"}
+    llm = LLM({"provider": provider, "model": strong.get(provider), "effort": "medium"})
+    result = llm.parse(SYSTEM, f"<business>\n{description.strip()}\n</business>", Generated, max_tokens=8000)
+    if result.stop != "ok":
+        raise SystemExit(f"Could not generate a config ({result.stop}). Try rephrasing, or edit config.example.yaml by hand.")
+    g = result.parsed
 
     cfg = copy.deepcopy(example)
     cfg["profile"].update(
@@ -90,6 +85,8 @@ def generate(description: str, example: dict, model: str = "claude-opus-5-5") ->
     src["apify"]["queries"] = g.linkedin_queries
     sites = src["web"]["sites"]
     src["web"]["sites"] = sites + [s for s in g.extra_sites if s not in sites]
+    cfg["scoring"]["provider"] = provider
+    cfg["scoring"]["model"] = {"anthropic": "claude-haiku-4-5", "openai": "gpt-5-mini", "gemini": "gemini-3.8-flash"}.get(provider, "")
     return cfg
 
 

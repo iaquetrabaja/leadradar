@@ -1,8 +1,8 @@
 # 📡 LeadRadar
 
-**Find people who are asking for what you sell — on LinkedIn, X, Reddit, Workana, Freelancer.com, Hacker News, Bluesky and any site you point it at. Claude reads every post, scores real buying intent, writes a helpful first reply, and pings you on Telegram.**
+**Find people who are asking for what you sell — on LinkedIn, X, Reddit, Workana, Freelancer.com, Hacker News, Bluesky and any site you point it at. AI (Claude, ChatGPT or Gemini) reads every post, scores real buying intent, writes a helpful first reply, and pings you on Telegram.**
 
-> 🇪🇸 [Leer en español](README.es.md)
+> 🇪🇸 [Leer en español](README.es.md) · 📘 **[Step-by-step setup guide with screenshots](docs/GUIDE.md)** — no install needed
 
 ```
  sources ──► recent only ──► dedupe ──► Claude scores intent + fit ──► Telegram / Discord / Slack
@@ -14,13 +14,14 @@
 - **Drafts only, never auto-sends.** You stay in control of what goes out.
 - **No account bans.** LinkedIn, X and Reddit are reached through no-cookie Apify actors — never your own logged-in session.
 - **Any trade.** `leadradar init --describe "SEO freelancer for Shopify stores"` writes the config for you.
-- **Cheap and serverless.** ~$0.09 of Claude per 100 posts, runs free on GitHub Actions.
+- **Your choice of AI.** Claude (default), ChatGPT, Gemini, or any OpenAI-compatible API (OpenRouter, Groq, Ollama…).
+- **Cheap and serverless.** ~$0.10 of AI per 100 posts, runs free on GitHub Actions.
 
 ## API keys — as few as possible
 
 | Key | Needed? | What for | Where to get it | Cost |
 |---|---|---|---|---|
-| `ANTHROPIC_API_KEY` | **Required** | Claude scores posts and writes drafts | [console.anthropic.com](https://console.anthropic.com) → API keys | ~$0.09 per 100 posts (Haiku) |
+| **One AI key:** `ANTHROPIC_API_KEY` *or* `OPENAI_API_KEY` *or* `GEMINI_API_KEY` | **Required** | Reads, scores and drafts replies (set `scoring.provider` to match) | [Claude](https://console.anthropic.com/settings/keys) · [OpenAI](https://platform.openai.com/api-keys) · [Gemini](https://aistudio.google.com/apikey) | ~$0.10 per 100 posts (Claude Haiku) |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | **Required** (or Discord/Slack) | Where leads arrive | @BotFather in Telegram, then `leadradar telegram-setup` | Free |
 | `APIFY_API_TOKEN` | Recommended | **LinkedIn + X + Reddit** in one key, no cookies | [apify.com](https://apify.com) → Settings → API & Integrations | Pay per result, free monthly credit; ~$0.10–0.30 per run at defaults |
 | `SERPER_API_KEY` | Optional | `web` source: Quora, Indie Hackers, forums via Google | [serper.dev](https://serper.dev) | 2,500 free searches |
@@ -30,17 +31,9 @@ With only the two required keys you already get **Workana, Freelancer.com, Hacke
 
 ## What it looks like
 
-Each lead arrives in Telegram as a card:
+Each lead arrives in Telegram as a card — score, what they need, why it fits, budget, an expandable reply draft and an "Open post" button:
 
-```
-92/100 · 🎯 Seeking a provider · workana
-Hostel needs an n8n agent for WhatsApp, Gmail and Instagram bookings
-📝 Small hostel wants bookings answered automatically across WhatsApp, Gmail and Instagram.
-💡 WhatsApp + email automation for a small business: core offer.
-💰 USD 250 - 500
-Draft reply ▸ (tap to expand)
-[ Open post ]
-```
+<img src="docs/img/06-telegram-real.png" width="420" alt="Real LeadRadar notifications in Telegram (names blurred)">
 
 …and every run also writes `output/leads.html`: a filterable page with one-click "copy draft".
 
@@ -116,13 +109,14 @@ Everything lives in `config.yaml` — the [example](config.example.yaml) is comm
 - **`queries`** — phrases your buyers actually write (*"busco a alguien que automatice"*, *"looking for a zapier expert"*). Keyword APIs (Bluesky, HN, Workana…) work better with their own short `queries` per source; Claude filters intent afterwards.
 - **`max_age_hours`** — 72 by default. Use 24 for a daily run if you only want today's posts.
 - **`notify.min_score`** — 60 by default. Hard rules cap vendors at 30 and on-topic chatter at 55, so anything ≥ 60 is a buyer explicitly asking for help; raise it to 75–85 for only the hottest.
-- **`scoring.model`** — `claude-haiku-4-5` by default: measured at **~$0.09 per 100 posts**. `claude-sonnet-5-5` or `claude-opus-5-5` write sharper drafts for ~3–4× the price. `max_items_per_run` caps spend, and every run logs tokens and estimated cost.
+- **`scoring.provider`** — `anthropic` (default), `openai`, `gemini` or `openai_compatible` (+ `base_url`). See [the guide](docs/GUIDE.md#10-switching-ai-provider).
+- **`scoring.model`** — empty = the provider's cheap default (`claude-haiku-4-5`, `gpt-5-mini`, `gemini-3.8-flash`). Claude Haiku: measured at **~$0.09 per 100 posts**. `claude-sonnet-5-5` or `claude-opus-5-5` write sharper drafts for ~3–4× the price. `max_items_per_run` caps spend, and every run logs tokens and estimated cost.
 
 `config.local.yaml` (git-ignored) takes precedence over `config.yaml` if present — handy for local experiments.
 
 ## How scoring works
 
-Posts are sent to Claude in batches with your offer in the system prompt. Claude returns structured JSON per post (validated with Pydantic): whether the author is a **buyer or a vendor** and whether they **explicitly ask for help** (vendors are capped at 30 and on-topic chatter at 55, so neither is ever notified), `score` (0–100), `intent` (seeking provider / tool / asking how / frustrated / job post), a one-line summary and reason in your language, and — for leads — a reply draft **in the post's language** that leads with something useful instead of a pitch. Post content is treated as untrusted data (instructions inside posts are ignored).
+Posts are sent to the AI in batches with your offer in the system prompt. The model returns structured JSON per post (validated with Pydantic): whether the author is a **buyer or a vendor** and whether they **explicitly ask for help** (vendors are capped at 30 and on-topic chatter at 55, so neither is ever notified), `score` (0–100), `intent` (seeking provider / tool / asking how / frustrated / job post), a one-line summary and reason in your language, and — for leads — a reply draft **in the post's language** that leads with something useful instead of a pitch. Post content is treated as untrusted data (instructions inside posts are ignored).
 
 ## Using it responsibly
 

@@ -5,12 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "leadradar"
 version = "0.1.0"
-description = "Find people asking for what you sell — across LinkedIn, Reddit, X, HN, Bluesky, freelance boards and any site — scored by Claude, delivered to Telegram."
+description = "Find people asking for what you sell — across LinkedIn, Reddit, X, HN, Bluesky, freelance boards and any site — scored by Claude, ChatGPT or Gemini, delivered to Telegram."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
   "anthropic>=1.11",
+  "openai>=1.60",  # also used for Gemini and other OpenAI-compatible APIs
   "pydantic>=2.6",
   "pyyaml>=6",
   "httpx>=0.27",

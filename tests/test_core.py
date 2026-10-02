@@ -102,23 +102,22 @@ def test_generator_maps_every_field_into_example_config():
         subreddits=["SEO"], exclude=["curso"], extra_sites=["community.shopify.com"], bluesky_langs=["es"], workana=True,
     )
 
-    class FakeResp:
-        stop_reason = "end_turn"
-        parsed_output = fake
+    from leadradar import llm
 
-    class FakeClient:
-        class beta:
-            class messages:
-                @staticmethod
-                def parse(**kw):
-                    return FakeResp()
+    class FakeLLM:
+        def __init__(self, scoring):
+            pass
 
-    orig = generator.anthropic.Anthropic
-    generator.anthropic.Anthropic = lambda: FakeClient()
+        def parse(self, *a, **kw):
+            return llm.Result(fake, "ok")
+
+    orig = llm.LLM
+    llm.LLM = FakeLLM
     try:
-        cfg = generator.generate("SEO freelancer", example)
+        cfg = generator.generate("SEO freelancer", example, provider="gemini")
     finally:
-        generator.anthropic.Anthropic = orig
+        llm.LLM = orig
+    assert cfg["scoring"]["provider"] == "gemini" and cfg["scoring"]["model"] == "gemini-3.8-flash"
     assert cfg["queries"] == ["busco seo"]
     assert cfg["sources"]["workana"]["enabled"] is True
     assert "community.shopify.com" in cfg["sources"]["web"]["sites"]
@@ -194,21 +193,70 @@ def test_vendor_and_non_request_scores_are_capped():
 
     items = [item(n=i) for i in range(3)]
     verdicts = scorer.Verdicts(results=[
-        scorer.Verdict(index=0, author_role="vendor", explicit_request=True, is_lead=True, score=90, intent="seeking_provider", lang="en", summary="", why="", draft="hi"),
-        scorer.Verdict(index=1, author_role="buyer", explicit_request=False, is_lead=True, score=90, intent="asking_how", lang="en", summary="", why="", draft="hi"),
-        scorer.Verdict(index=2, author_role="buyer", explicit_request=True, is_lead=True, score=90, intent="seeking_provider", lang="en", summary="", why="", draft="hi"),
+        scorer.Verdict(index=0, author_role="vendor", explicit_request=True, fits_offer=True, is_lead=True, score=90, intent="seeking_provider", lang="en", summary="", why="", draft="hi"),
+        scorer.Verdict(index=1, author_role="buyer", explicit_request=False, fits_offer=True, is_lead=True, score=90, intent="asking_how", lang="en", summary="", why="", draft="hi"),
+        scorer.Verdict(index=2, author_role="buyer", explicit_request=True, fits_offer=True, is_lead=True, score=90, intent="seeking_provider", lang="en", summary="", why="", draft="hi"),
     ])
 
-    class Resp:
-        stop_reason = "end_turn"
-        parsed_output = verdicts
-        class usage:
-            input_tokens = output_tokens = 0
-            cache_read_input_tokens = cache_creation_input_tokens = 0
+    from leadradar.llm import Result
+
+    class FakeLLM:
+        def parse(self, *a, **kw):
+            return Result(verdicts, "ok", usage={"input": 1, "output": 1, "cache_read": 0, "cache_write": 0})
 
     s = scorer.Scorer.__new__(scorer.Scorer)
-    s.model, s.effort, s.system, s.rejected = "claude-haiku-4-5", "low", "", []
+    s.llm, s.system, s.rejected = FakeLLM(), "", []
     s.usage = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
-    s.client = type("C", (), {"beta": type("B", (), {"messages": type("M", (), {"parse": staticmethod(lambda **kw: Resp())})})})()
     scores = [l.score for l in s._score_batch(items)]
     assert scores == [30, 55, 90]
+
+
+def _fake_openai_completion(parsed=None, refusal=None):
+    from types import SimpleNamespace as NS
+
+    msg = NS(parsed=parsed, refusal=refusal)
+    usage = NS(prompt_tokens=100, completion_tokens=20, prompt_tokens_details=NS(cached_tokens=40))
+    return NS(choices=[NS(message=msg, finish_reason="stop")], usage=usage)
+
+
+def test_openai_and_gemini_providers(monkeypatch):
+    from leadradar import llm, scorer
+
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setenv("GEMINI_API_KEY", "k")
+    gem = llm.LLM({"provider": "gemini"})
+    assert gem.model == "gemini-3.8-flash"
+    assert "generativelanguage.googleapis.com" in str(gem.client.base_url)
+
+    oai = llm.LLM({"provider": "openai"})
+    calls = []
+    verdicts = scorer.Verdicts(results=[])
+
+    class Completions:
+        @staticmethod
+        def parse(**kw):
+            calls.append(kw)
+            return _fake_openai_completion(parsed=verdicts)
+
+    oai.client = type("C", (), {"chat": type("Ch", (), {"completions": Completions})})()
+    r = oai.parse("sys", "user", scorer.Verdicts)
+    assert r.stop == "ok" and r.parsed is verdicts
+    assert r.usage == {"input": 100, "output": 20, "cache_read": 40, "cache_write": 0}
+    assert calls[0]["max_completion_tokens"] == 16000 and calls[0]["reasoning_effort"] == "low"
+    assert calls[0]["messages"][0] == {"role": "system", "content": "sys"}
+    assert abs(oai.cost(r.usage) - (60 * 0.25 + 20 * 2.0 + 40 * 0.025) / 1e6) < 1e-12
+
+    Completions.parse = staticmethod(lambda **kw: _fake_openai_completion(refusal="no"))
+    assert oai.parse("s", "u", scorer.Verdicts).stop == "refusal"
+
+
+def test_missing_key_and_bad_provider_are_clear(monkeypatch):
+    import pytest
+
+    from leadradar import llm
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(SystemExit, match="GEMINI_API_KEY"):
+        llm.LLM({"provider": "gemini"})
+    with pytest.raises(SystemExit, match="provider must be one of"):
+        llm.LLM({"provider": "bard"})
