@@ -69,7 +69,12 @@ def fetch_text(url: str, *, stealth: bool = False) -> tuple[int, str]:
             if stealth
             else Fetcher.get(url, impersonate="chrome")
         )
-        body = page.body.decode("utf-8", "replace") if isinstance(page.body, bytes) else str(page.body)
+        body = page.body
+        if isinstance(body, bytes):
+            try:
+                body = body.decode("utf-8")
+            except UnicodeDecodeError:
+                body = body.decode("cp1252", "replace")  # some sites still serve Latin-1
         return page.status, body
     resp = client().get(url)
     return resp.status_code, resp.text

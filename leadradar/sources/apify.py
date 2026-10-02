@@ -1,13 +1,15 @@
 """Apify actors (APIFY_API_TOKEN): the reliable way to search LinkedIn posts, X,
 Instagram, Facebook groups… without logging in with your own account.
-Pay-per-result on your Apify account (LinkedIn preset ≈ $2 per 1,000 posts).
+Pay-per-result on your Apify account. Presets: linkedin (≈ $2 / 1,000 posts),
+x (≈ $0.40 / 1,000 tweets), reddit (Reddit Scraper Lite, pay per result).
 
 Config:
     apify:
       enabled: true
       max_per_query: 25
       actors:
-        - preset: linkedin            # built-in mapping
+        - preset: linkedin            # built-in mappings: linkedin | x | reddit
+        - preset: x
         - actor: someuser/x-search    # any actor, with your own input + field map
           input: {searchTerms: "{queries}", maxItems: 25}
           fields: {url: url, text: text, author: author.userName, date: createdAt, title: ""}
@@ -34,6 +36,11 @@ def _linkedin_window(since: datetime) -> str:
     return "24h" if hours <= 24 else "week" if hours <= 168 else "month"
 
 
+def _reddit_window(since: datetime) -> str:
+    hours = (datetime.now(timezone.utc) - since).total_seconds() / 3600
+    return "day" if hours <= 24 else "week" if hours <= 168 else "month"
+
+
 PRESETS = {
     "linkedin": {
         "actor": "harvestapi/linkedin-post-search",
@@ -53,11 +60,49 @@ PRESETS = {
         },
         "label": "linkedin.com",
     },
+    # X/Twitter search, no account needed (~$0.40 per 1,000 tweets).
+    "x": {
+        "actor": "apidojo/tweet-scraper",
+        "input": lambda conf, ctx: {
+            "searchTerms": ctx.queries,
+            "maxItems": conf.get("max_per_query", 25) * len(ctx.queries),
+            "sort": "Latest",
+            "start": ctx.since.strftime("%Y-%m-%d"),
+            **({"tweetLanguage": conf["x_lang"]} if conf.get("x_lang") else {}),
+        },
+        "fields": {"url": "url", "text": "fullText|text", "author": "author.userName", "date": "createdAt", "title": ""},
+        "label": "x.com",
+    },
+    # Reddit search without login — Reddit blocks anonymous API access since 2025.
+    "reddit": {
+        "actor": "trudax/reddit-scraper-lite",
+        "input": lambda conf, ctx: {
+            "searches": ctx.queries,
+            "sort": "new",
+            "time": _reddit_window(ctx.since),
+            "maxItems": conf.get("max_per_query", 25) * len(ctx.queries),
+            "maxPostCount": conf.get("max_per_query", 25),
+            "searchPosts": True,
+            "skipComments": True,
+            "skipUserPosts": True,
+            "skipCommunity": True,
+            "includeNSFW": False,
+        },
+        "fields": {"url": "url", "text": "body", "author": "username", "date": "createdAt", "title": "title"},
+        "label": "reddit.com",
+    },
 }
 
 
 def _pick(obj, path: str):
+    """Dotted path into a row; "a|b" tries a, then b."""
     if not path:
+        return ""
+    if "|" in path:
+        for alt in path.split("|"):
+            value = _pick(obj, alt)
+            if value not in ("", None):
+                return value
         return ""
     for part in path.split("."):
         if isinstance(obj, dict):
@@ -86,6 +131,10 @@ def _parse_date(value) -> datetime | None:
         try:
             return datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError:
+            pass
+        try:  # Twitter style: "Fri Oct 02 07:14:31 +0000 2026"
+            return datetime.strptime(value, "%a %b %d %H:%M:%S %z %Y")
+        except ValueError:
             return None
     return None
 
@@ -106,7 +155,8 @@ def _run_actor(actor: str, payload: dict, token: str) -> list[dict]:
 def collect(conf: dict, ctx) -> list[Item]:
     token = env("APIFY_API_TOKEN")
     if not token:
-        raise SystemExit("sources.apify needs APIFY_API_TOKEN")
+        log.warning("apify: no APIFY_API_TOKEN — skipping LinkedIn/X/Reddit (add the key to enable them)")
+        return []
     items: list[Item] = []
     for spec in conf.get("actors") or [{"preset": "linkedin"}]:
         if "preset" in spec:

@@ -168,3 +168,47 @@ def test_telegram_card_fits_even_with_heavy_escaping():
     card = telegram.card(lead, texts("en"))
     assert len(card) <= 4000
     assert card.endswith("</blockquote>")
+
+
+def test_workana_relative_dates():
+    from leadradar.sources.workana import parse_relative
+
+    assert (NOW - parse_relative("Hace 16 horas", NOW)).total_seconds() == 16 * 3600
+    assert (NOW - parse_relative("Ayer", NOW)).days == 1
+    assert (NOW - parse_relative("Publicado: Hace 2 semanas", NOW)).days == 14
+    assert (NOW - parse_relative("Hace 4 d�as", NOW)).days == 4  # mis-decoded accent still works
+    assert parse_relative("???", NOW) is None
+
+
+def test_dates_decoded_from_linkedin_and_x_ids():
+    from leadradar.sources.web import date_from_url
+
+    li = date_from_url("https://www.linkedin.com/posts/someone_activity-7511623336741855232-gzwf")
+    assert li.isoformat().startswith("2026-10-02T03:09:22")
+    assert date_from_url("https://x.com/a/status/1975000000000000000").year == 2025
+    assert date_from_url("https://example.com/post/1") is None
+
+
+def test_vendor_and_non_request_scores_are_capped():
+    from leadradar import scorer
+
+    items = [item(n=i) for i in range(3)]
+    verdicts = scorer.Verdicts(results=[
+        scorer.Verdict(index=0, author_role="vendor", explicit_request=True, is_lead=True, score=90, intent="seeking_provider", lang="en", summary="", why="", draft="hi"),
+        scorer.Verdict(index=1, author_role="buyer", explicit_request=False, is_lead=True, score=90, intent="asking_how", lang="en", summary="", why="", draft="hi"),
+        scorer.Verdict(index=2, author_role="buyer", explicit_request=True, is_lead=True, score=90, intent="seeking_provider", lang="en", summary="", why="", draft="hi"),
+    ])
+
+    class Resp:
+        stop_reason = "end_turn"
+        parsed_output = verdicts
+        class usage:
+            input_tokens = output_tokens = 0
+            cache_read_input_tokens = cache_creation_input_tokens = 0
+
+    s = scorer.Scorer.__new__(scorer.Scorer)
+    s.model, s.effort, s.system, s.rejected = "claude-haiku-4-5", "low", "", []
+    s.usage = {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0}
+    s.client = type("C", (), {"beta": type("B", (), {"messages": type("M", (), {"parse": staticmethod(lambda **kw: Resp())})})})()
+    scores = [l.score for l in s._score_batch(items)]
+    assert scores == [30, 55, 90]

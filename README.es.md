@@ -1,29 +1,42 @@
 # 📡 LeadRadar
 
-**Encuentra a gente que está pidiendo justo lo que tú vendes — en LinkedIn, Reddit, X, Hacker News, Bluesky, Workana, Freelancer.com y cualquier web que le indiques. Claude lee cada publicación, puntúa la intención real de compra, te escribe un primer mensaje útil y te avisa por Telegram.**
+**Encuentra a gente que está pidiendo justo lo que tú vendes — en LinkedIn, X, Reddit, Workana, Freelancer.com, Hacker News, Bluesky y cualquier web que le indiques. Claude lee cada publicación, puntúa la intención real de compra, te escribe un primer mensaje útil y te avisa por Telegram.**
 
 > 🇬🇧 [Read in English](README.md)
 
 ```
- fuentes ──► sin duplicados ──► Claude puntúa intención ──► Telegram / Discord / Slack
- (10 tipos)  (SQLite)            y redacta respuesta           + leads.html / leads.csv
+ fuentes ──► solo recientes ──► sin duplicados ──► Claude puntúa intención ──► Telegram / Discord / Slack
+ (10 tipos)  (≤ 72 h)           (SQLite)            y redacta respuesta           + leads.html / leads.csv
 ```
 
-- **Intención, no menciones.** Las herramientas de *social listening* te dicen que alguien escribió "n8n". LeadRadar te dice *"una clínica dental quiere recordatorios de citas por WhatsApp y busca un freelance — aquí tienes una respuesta"*.
-- **Solo borradores, nunca envía nada solo.** Tú decides qué sale (y cumples las normas de las plataformas y la ley antispam).
-- **Sin baneos.** A LinkedIn y X se llega con buscadores o actores de Apify sin cookies — nunca con tu sesión.
-- **Gratis en GitHub Actions.** Copias la plantilla, metes tus claves y listo. Sin servidor, sin Docker, sin base de datos que mantener.
-- **En cualquier idioma.** Búsquedas, puntuación y borradores en español, inglés o lo que hablen tus clientes.
+- **Intención, no menciones.** Las herramientas de *social listening* te dicen que alguien escribió "n8n". LeadRadar te dice *"un hostal quiere un agente de reservas por WhatsApp y busca freelance — aquí tienes una respuesta"*. Los que ofrecen sus propios servicios se descartan.
+- **Solo leads frescos.** Cada fuente se filtra por su fecha real de publicación (por defecto, últimas 72 h) — nada de ofertas de hace un mes.
+- **Solo borradores, nunca envía nada solo.** Tú decides qué sale.
+- **Sin baneos.** A LinkedIn, X y Reddit se llega con actores de Apify sin cookies — nunca con tu sesión.
+- **Cualquier oficio.** `leadradar init --describe "SEO freelance para tiendas Shopify"` te escribe la configuración.
+- **Barato y sin servidor.** ~0,09 $ de Claude por cada 100 publicaciones, gratis en GitHub Actions.
+
+## Claves de API — las mínimas
+
+| Clave | ¿Hace falta? | Para qué | Dónde se saca | Coste |
+|---|---|---|---|---|
+| `ANTHROPIC_API_KEY` | **Obligatoria** | Claude puntúa y redacta | [console.anthropic.com](https://console.anthropic.com) → API keys | ~0,09 $ por 100 publicaciones (Haiku) |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | **Obligatoria** (o Discord/Slack) | Donde te llegan los leads | @BotFather en Telegram y luego `leadradar telegram-setup` | Gratis |
+| `APIFY_API_TOKEN` | Recomendada | **LinkedIn + X + Reddit** con una sola clave, sin cookies | [apify.com](https://apify.com) → Settings → API & Integrations | Pago por resultado, con crédito gratis mensual; ~0,10–0,30 $ por pasada con los valores por defecto |
+| `SERPER_API_KEY` | Opcional | Fuente `web`: Quora, Indie Hackers, foros vía Google | [serper.dev](https://serper.dev) | 2.500 búsquedas gratis |
+| `DISCORD_WEBHOOK_URL` / `SLACK_WEBHOOK_URL` | Opcional | Otros canales de aviso | Ajustes del canal → Integraciones → Webhooks | Gratis |
+
+Solo con las dos obligatorias ya tienes **Workana, Freelancer.com, Hacker News y Bluesky** (no necesitan clave). Añade Apify para LinkedIn, X y Reddit. Si no pones la clave de Apify, esa fuente se salta sola.
 
 ## Cómo se ve
 
 Cada lead llega a Telegram como una tarjeta:
 
 ```
-85/100 · 🎯 Busca proveedor · workana
-Chatbot IA para WhatsApp Business con precios, horarios y envíos
-📝 Tienda quiere un bot de WhatsApp que responda precios, horarios y envíos, con panel.
-💡 Atención al cliente automatizada para un e-commerce pequeño: encaja de lleno.
+92/100 · 🎯 Busca proveedor · workana
+Hostal busca agente n8n para reservas por WhatsApp, Gmail e Instagram
+📝 Hostal pequeño quiere responder reservas automáticamente por WhatsApp, Gmail e Instagram.
+💡 Automatización de WhatsApp + email para un pequeño negocio: encaja de lleno.
 💰 USD 250 - 500
 Borrador de respuesta ▸ (toca para desplegar)
 [ Abrir publicación ]
@@ -33,18 +46,18 @@ Borrador de respuesta ▸ (toca para desplegar)
 
 ## Fuentes
 
-| Fuente | ¿Clave? | Notas |
+| Fuente | Clave | Notas |
 |---|---|---|
+| `workana` | – | Proyectos de España y Latam (usa [Scrapling](https://github.com/D4Vinci/Scrapling) para pasar el muro anti-bots). Filtrado por "Hace N horas/días". |
+| `freelancer` | – | Proyectos abiertos de Freelancer.com. |
 | `hackernews` | – | API de Algolia. Posts y comentarios. |
 | `bluesky` | – | Búsqueda pública, filtro por idioma. |
-| `freelancer` | – | Proyectos abiertos de Freelancer.com. |
-| `workana` | – | Proyectos de España y Latinoamérica. Necesita el extra `stealth` (Scrapling). |
-| `reddit` | opcional | RSS público (muy limitado). Usa `REDDIT_CLIENT_ID`/`SECRET` si ya los tienes (Reddit cerró el alta libre de claves de API a finales de 2025). |
-| `web` | opcional | Búsquedas `site:` en LinkedIn, X, Quora, Indie Hackers, foros… con `ddgs` (gratis, resultados flojos), **Serper** (Google, 2.500 búsquedas gratis — recomendado), Brave o Exa (semántico). |
-| `apify` | `APIFY_API_TOKEN` | **Búsqueda de posts de LinkedIn sin cookies**, fiable (~2 $ / 1.000 posts), y cualquier otro actor de Apify (X, Instagram, grupos de Facebook…) con un mapeo de campos. |
-| `agentreach` | tu sesión | Reddit + X con las herramientas que instala [Agent-Reach](https://github.com/Panniantong/Agent-Reach) (`rdt-cli`, `twitter-cli`), que reutilizan **tus cookies con sesión iniciada**. La mejor cobertura, pero va contra las normas de automatización de esas plataformas — cuenta secundaria, poco volumen y solo en local. Desactivada por defecto. |
+| `apify` | `APIFY_API_TOKEN` | Presets: **`linkedin`** (búsqueda de posts, sin cookies), **`x`** (búsqueda de tweets), **`reddit`** (búsqueda de posts). O cualquier otro actor de Apify con un mapeo de campos (Instagram, grupos de Facebook…). |
+| `web` | `SERPER_API_KEY` | Búsquedas `site:` en Quora, Indie Hackers, foros… (también `ddgs` gratis sin clave, Brave, Exa). La fecha de los resultados de LinkedIn/X se saca de su id. |
 | `rss` | – | Cualquier feed RSS/Atom: portales de empleo, Google Alerts, foros. |
-| `scrape` | – | Cualquier página de listados con selectores CSS, con [Scrapling](https://github.com/D4Vinci/Scrapling) (incluye navegador sigiloso para webs con Cloudflare). |
+| `scrape` | – | Cualquier página de listados con selectores CSS (incluye navegador sigiloso para Cloudflare). |
+| `reddit` | – | RSS de Reddit sin clave. Muy limitado y bloqueado desde GitHub — mejor el preset `reddit` de Apify. |
+| `agentreach` | tu sesión | Reddit + X con las herramientas de [Agent-Reach](https://github.com/Panniantong/Agent-Reach) (`rdt-cli`, `twitter-cli`), que reutilizan **tus cookies**. Va contra las normas de automatización de esas plataformas — cuenta secundaria, poco volumen y solo en local. Desactivada por defecto. |
 
 Añadir una fuente es un archivo con una función `collect(conf, ctx) -> list[Item]` — mira `leadradar/sources/`.
 
@@ -57,7 +70,7 @@ leadradar init --describe "SEO freelance para negocios locales y tiendas Shopify
 leadradar init --describe "Email marketing con Klaviyo para tiendas online"
 ```
 
-Ejemplos listos (generados exactamente así): [`examples/seo.yaml`](examples/seo.yaml), [`examples/email-marketing.yaml`](examples/email-marketing.yaml). En una prueba, la config de SEO encontró una gestoría de Madrid, un médico deportivo y una marca de cacao en Shopify buscando SEO — entre 339 publicaciones.
+Ejemplos listos (generados exactamente así): [`examples/seo.yaml`](examples/seo.yaml), [`examples/email-marketing.yaml`](examples/email-marketing.yaml). En una prueba, la config de SEO encontró una gestoría de Madrid, un médico deportivo y una marca de cacao en Shopify buscando SEO.
 
 ## Empezar en tu ordenador
 
@@ -68,10 +81,11 @@ git clone https://github.com/Daaviid3792/leadradar && cd leadradar
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[stealth]"
 
-# pon tu ANTHROPIC_API_KEY en .env (lo crea init) y luego:
-leadradar init --describe "qué vendes y a quién"   # o `leadradar init` a secas para editarlo a mano
+leadradar init                                       # crea config.yaml + .env
+# pon tus claves en .env y adapta la config a tu negocio:
+leadradar init --force --describe "qué vendes y a quién"
 
-leadradar run --no-llm       # gratis: ver qué encuentra cada fuente (--sources web,workana para elegir)
+leadradar run --no-llm       # gratis: ver qué encuentra cada fuente (--sources workana,apify para elegir)
 leadradar run --dry-run      # puntúa con Claude y muestra los leads sin avisar
 leadradar run                # en serio
 ```
@@ -79,7 +93,7 @@ leadradar run                # en serio
 ### Telegram en 2 minutos
 
 1. En Telegram, habla con **@BotFather** → `/newbot` → copia el token en `TELEGRAM_BOT_TOKEN`.
-2. Abre tu bot nuevo y mándale cualquier mensaje.
+2. Abre tu bot nuevo y pulsa **Iniciar** (o mándale cualquier mensaje).
 3. `leadradar telegram-setup` te muestra tu `TELEGRAM_CHAT_ID`. Pégalo en `.env`.
 4. `leadradar test-notify` — te debería llegar una tarjeta de prueba.
 
@@ -87,14 +101,12 @@ leadradar run                # en serio
 
 ## Ejecutarlo en GitHub Actions (gratis, sin servidor)
 
-1. Pulsa **Use this template → Create a new repository** y hazlo **privado**. (Tu config describe tu negocio y los artefactos de cada pasada contienen los leads — en un repo público cualquiera puede descargarlos. Un fork de un repo público no puede ser privado, y GitHub desactiva los workflows programados en los forks hasta que los activas.)
-2. Copia `config.example.yaml` a `config.yaml`, edítalo y haz commit.
-3. **Settings → Secrets and variables → Actions**: añade `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` y las claves opcionales que uses.
-4. Pestaña **Actions** → activa los workflows → lanza **LeadRadar** a mano una vez.
+1. Pulsa **Use this template → Create a new repository** y hazlo **privado**. (Tu config describe tu negocio y los artefactos de cada pasada contienen los leads — en un repo público cualquiera puede descargarlos.)
+2. Copia `config.example.yaml` a `config.yaml` (o genérala con `init --describe`), edítala y haz commit.
+3. **Settings → Secrets and variables → Actions → New repository secret**: añade `ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` y `APIFY_API_TOKEN` si lo usas.
+4. Pestaña **Actions** → **LeadRadar** → **Run workflow** para probarlo una vez.
 
-A partir de ahí se ejecuta 3 veces al día (cambia el cron en `.github/workflows/leadradar.yml`). La base de datos de "ya visto" se guarda en la caché de Actions, así nunca recibes el mismo lead dos veces, y cada pasada sube `leads.html` como artefacto.
-
-> Reddit suele bloquear las IPs de GitHub en la vía sin claves. En Actions, cubre Reddit con `reddit.com` en `web.sites` (mejor con Serper o Exa). La fuente `agentreach` es solo para uso local.
+A partir de ahí se ejecuta según el horario de `.github/workflows/leadradar.yml` (3 veces al día por defecto — una vez al día suele bastar y cuesta un tercio). La base de datos de "ya visto" se guarda en la caché de Actions, así nunca recibes el mismo lead dos veces, y cada pasada sube `leads.html` como artefacto.
 
 ## Configuración
 
@@ -102,14 +114,15 @@ Todo está en `config.yaml` — el [ejemplo](config.example.yaml) está comentad
 
 - **`profile.offer` / `ideal_client` / `not_a_fit`** — Claude puntúa cada publicación contra esto. Sé concreto.
 - **`queries`** — frases que escriben de verdad tus clientes (*"busco a alguien que automatice"*, *"recomendáis alguna agencia de IA"*). Las APIs por palabra clave (Bluesky, HN, Workana…) funcionan mejor con sus propias `queries` cortas; Claude filtra la intención después.
-- **`notify.min_score`** — 70 es buen punto de partida; 85+ = está contratando explícitamente.
-- **`scoring.model`** — por defecto `claude-opus-5-5` con `effort: low`: medido en **~0,16 $ por 45 publicaciones** (≈ 0,50 $ por una pasada completa de 150). `claude-haiku-4-5` sale unas 4 veces más barato. `max_items_per_run` limita el gasto, y cada pasada muestra tokens y coste estimado.
+- **`max_age_hours`** — 72 por defecto. Pon 24 si lo ejecutas a diario y solo quieres lo de hoy.
+- **`notify.min_score`** — 60 por defecto. Las reglas fijas limitan a los vendedores a 30 y la charla sobre el tema a 55, así que todo lo ≥ 60 es un comprador pidiendo ayuda explícitamente; súbelo a 75–85 para solo lo más caliente.
+- **`scoring.model`** — `claude-haiku-4-5` por defecto: medido en **~0,09 $ por 100 publicaciones**. `claude-sonnet-5-5` o `claude-opus-5-5` escriben borradores más finos por unas 3–4 veces más. `max_items_per_run` limita el gasto, y cada pasada muestra tokens y coste estimado.
 
 Si existe `config.local.yaml` (ignorado por git) tiene prioridad sobre `config.yaml` — útil para pruebas en local.
 
 ## Cómo puntúa
 
-Las publicaciones van a Claude por lotes, con un prompt de sistema cacheado que contiene tu oferta. Claude devuelve JSON estructurado por publicación (validado con Pydantic): `score` (0–100), `intent` (busca proveedor / herramienta / pregunta cómo / frustrado / oferta de trabajo), un resumen y un motivo de una línea en tu idioma, y — si es lead — un borrador **en el idioma de la publicación** que empieza aportando algo útil en vez de vender. El contenido de las publicaciones se trata como datos no fiables (se ignoran instrucciones escritas dentro).
+Las publicaciones van a Claude por lotes con tu oferta en el prompt de sistema. Claude devuelve JSON estructurado por publicación (validado con Pydantic): si el autor es **comprador o vendedor** y si **pide ayuda explícitamente** (los vendedores se limitan a 30 y la charla sobre el tema a 55, así que nunca se avisan), `score` (0–100), `intent` (busca proveedor / herramienta / pregunta cómo / frustrado / oferta de trabajo), un resumen y un motivo de una línea en tu idioma, y — si es lead — un borrador **en el idioma de la publicación** que empieza aportando algo útil en vez de vender. El contenido de las publicaciones se trata como datos no fiables (se ignoran instrucciones escritas dentro).
 
 ## Úsalo con cabeza
 
@@ -119,7 +132,7 @@ Las publicaciones van a Claude por lotes, con un prompt de sistema cacheado que 
 
 ## Proyectos relacionados
 
-LeadRadar toma ideas de [LeadEcho](https://github.com/rohansx/leadecho), [OpenOutreach](https://github.com/eracle/OpenOutreach) y [upwork-job-alerts](https://github.com/janglewood/upwork-job-alerts). Para investigación con agentes en plataformas que piden login, mira [Agent-Reach](https://github.com/Panniantong/Agent-Reach).
+LeadRadar toma ideas de [LeadEcho](https://github.com/rohansx/leadecho), [OpenOutreach](https://github.com/eracle/OpenOutreach) y [upwork-job-alerts](https://github.com/janglewood/upwork-job-alerts), y usa [Scrapling](https://github.com/D4Vinci/Scrapling) para las webs difíciles.
 
 ## Licencia
 

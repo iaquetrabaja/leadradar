@@ -22,14 +22,18 @@ DEFAULTS: dict = {
     "max_age_hours": 72,
     "sources": {
         "hackernews": {"enabled": True},
-        "reddit": {"enabled": True, "subreddits": [], "global_search": True},
+        "reddit": {"enabled": False, "subreddits": [], "global_search": True},
         "bluesky": {"enabled": True, "langs": []},
         "freelancer": {"enabled": False, "queries": []},
         "workana": {"enabled": False, "language": "es", "queries": []},
-        "apify": {"enabled": False, "max_per_query": 25, "actors": [{"preset": "linkedin"}]},
+        "apify": {
+            "enabled": False,
+            "max_per_query": 10,
+            "actors": [{"preset": "linkedin"}, {"preset": "x"}, {"preset": "reddit"}],
+        },
         "agentreach": {"enabled": False, "reddit": True, "x": True, "x_lang": "", "max_per_query": 25},
         "web": {
-            "enabled": True,
+            "enabled": False,
             "provider": "ddgs",  # ddgs (free, no key) | serper | brave | exa
             "sites": ["linkedin.com/posts", "x.com", "quora.com", "indiehackers.com"],
             "freshness": "week",  # day | week | month
@@ -41,13 +45,13 @@ DEFAULTS: dict = {
         "scrape": {"enabled": False, "pages": []},
     },
     "scoring": {
-        "model": "claude-opus-5-5",
-        "effort": "low",
+        "model": "claude-haiku-4-5",  # cheapest; claude-sonnet-5-5 / claude-opus-5-5 for sharper drafts
+        "effort": "low",  # used by Sonnet/Opus only
         "batch_size": 15,
         "max_items_per_run": 150,
     },
     "notify": {
-        "min_score": 70,
+        "min_score": 60,
         "max_leads": 15,
         "telegram": {"enabled": True},
         "discord": {"enabled": False},

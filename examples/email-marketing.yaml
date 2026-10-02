@@ -3,87 +3,70 @@
 # Every option is explained in config.example.yaml. Review the queries — you know your buyers best.
 
 profile:
-  offer: 'Email marketing freelance para e-commerce: estrategia, automatizaciones (carrito abandonado,
-    bienvenida, post-compra, winback), newsletters y campañas con Klaviyo, Mailchimp, Brevo y ActiveCampaign;
-    migraciones entre plataformas y mejora de entregabilidad (SPF, DKIM, DMARC, spam).
+  offer: 'Email marketing freelance: estrategia, automatizaciones y newsletters con Klaviyo, Mailchimp,
+    Brevo y ActiveCampaign. Flujos de carrito abandonado, bienvenida y post-compra para e-commerce, y
+    migraciones entre plataformas de email sin perder listas ni automatizaciones.
 
     '
-  ideal_client: 'Tiendas online (Shopify, WooCommerce, PrestaShop) y marcas DTC en España, Latinoamérica
-    o mercados angloparlantes que ya venden, tienen lista de suscriptores y quieren aumentar ingresos
-    por email, montar flujos automatizados, migrar de plataforma o resolver problemas de entregabilidad.
+  ideal_client: 'Tiendas online (Shopify, WooCommerce, PrestaShop) y pequeñas marcas o negocios digitales
+    de España, LatAm o mercado global que ya venden y tienen lista de suscriptores, pero no tienen automatizaciones,
+    tienen baja apertura/conversión o necesitan migrar de plataforma (p. ej. Mailchimp a Klaviyo o Brevo).
 
     '
-  not_a_fit: 'Empresas que buscan contratar un empleado a jornada completa, quienes quieren comprar bases
-    de datos o hacer envíos masivos en frío/spam, estudiantes, otros freelancers que se promocionan, proyectos
-    sin tienda ni lista, y ofertas de presupuesto ínfimo o pago solo por comisión.
+  not_a_fit: 'Empresas que buscan un empleado a tiempo completo, envíos masivos de spam o listas compradas,
+    estudiantes buscando cursos, otras agencias ofreciendo servicios, proyectos sin presupuesto o negocios
+    sin web ni lista de contactos.
 
     '
-  tone: 'Cercano, profesional y práctico: aportar primero un consejo concreto y útil sobre su problema
-    (flujo, plataforma o entregabilidad), sin sonar a venta agresiva; ofrecer ayuda de forma breve al
-    final. En español o inglés según el idioma del post.'
+  tone: 'Cercano, profesional y útil: aporta primero un consejo concreto sobre su problema (flujo, entregabilidad,
+    segmentación), sin sonar a venta agresiva; ofrece ayuda de forma natural y breve.'
   signature: ''
   report_language: es
 queries:
 - busco experto en Klaviyo
-- necesito ayuda con email marketing
-- recomendáis freelance de email marketing
-- mis correos llegan a spam
-- flujo de carrito abandonado no funciona
-- migrar de Mailchimp a Klaviyo
-- alguien que me lleve la newsletter
-- automatizaciones en Brevo ayuda
-- looking for a Klaviyo expert
+- necesito ayuda con Mailchimp
+- busco freelance email marketing
+- cómo configurar carrito abandonado
+- migrar de Mailchimp a Brevo
+- recomendáis agencia de email marketing
+- mis emails no generan ventas
+- looking for Klaviyo expert
+- need help with email automation
 - recommend an email marketing freelancer
-- need help with abandoned cart flow
-- my emails are going to spam
-- Shopify email flows not converting
-- help migrating from Mailchimp to Klaviyo
-- ActiveCampaign automation help needed
-- low open rates on my newsletter
+- abandoned cart flow not working
+- migrate Mailchimp to Klaviyo
+- hire someone for newsletter
+- my email open rates dropped
+- ActiveCampaign automation help
+- welcome flow Shopify store help
 exclude:
-- estamos contratando
-- oferta de empleo
-- full-time
-- we're hiring
-- job opening
-- curso de email marketing
-- course
-- webinar
-- I offer
+- estoy ofreciendo
 - ofrezco mis servicios
-- DM me for
-- my agency
-- buy email list
-- comprar base de datos
-- affiliate
-- tutorial
+- '[for hire]'
+- I am offering
+- we are hiring full-time
+- oferta de empleo
+- curso de email marketing
+- free course
+- webinar
+- case study
+- certificación
+- DM me for services
+- job opening
+- prácticas
 max_age_hours: 72
 sources:
   hackernews:
     enabled: true
     queries: &id001
     - Klaviyo
+    - Mailchimp
     - email marketing
     - abandoned cart
-    - email deliverability
-    - Mailchimp
     - ActiveCampaign
     - Brevo
     - newsletter
-  reddit:
-    enabled: true
-    subreddits:
-    - emailmarketing
-    - klaviyo
-    - shopify
-    - ecommerce
-    - DTC
-    - smallbusiness
-    - Emailmarketing
-    - marketing
-    - ecommercemarketing
-    - Entrepreneur
-    global_search: true
+    - email automation
   bluesky:
     enabled: true
     langs:
@@ -97,54 +80,76 @@ sources:
     - email marketing automation
     - Mailchimp newsletter
     - ActiveCampaign automation
-    - email deliverability
-    - email marketing e-commerce
+    - email platform migration
+    - Brevo email marketing
   workana:
     enabled: true
     language: es
     queries: *id002
   apify:
-    enabled: false
-    max_per_query: 25
+    enabled: true
+    max_per_query: 10
+    x_lang: ''
     queries:
-    - busco freelance email marketing
-    - recomendaciones experto Klaviyo
-    - looking for Klaviyo specialist
-    - need email marketing freelancer
-    - recommend email marketing consultant
-    - busco ayuda con newsletter
+    - looking for a Klaviyo expert
+    - busco especialista en email marketing
+    - recommendations for email marketing freelancer
+    - necesito alguien para newsletter
+    - need help setting up email automations
+    - alguien que sepa de Klaviyo
     actors:
     - preset: linkedin
+    - preset: x
+    - preset: reddit
   web:
-    enabled: true
-    provider: ddgs
+    enabled: false
+    provider: serper
     sites:
-    - linkedin.com/posts
-    - x.com
     - quora.com
     - indiehackers.com
-    - reddit.com
+    - linkedin.com/posts
+    - x.com
     - community.shopify.com
     - community.klaviyo.com
     - community.mailchimp.com
-    - forocoches.com
+    - forobeta.com
     freshness: week
     results_per_query: 10
     max_requests: 40
     region: es-es
+  reddit:
+    enabled: false
+    subreddits:
+    - emailmarketing
+    - klaviyo
+    - shopify
+    - ecommerce
+    - Emailmarketing
+    - smallbusiness
+    - entrepreneur
+    - marketing
+    - forhire
+    - DigitalMarketing
+    global_search: true
+  agentreach:
+    enabled: false
+    reddit: true
+    x: true
+    x_lang: ''
+    max_per_query: 25
   rss:
     enabled: false
-    feeds: null
+    feeds: []
   scrape:
     enabled: false
     pages: []
 scoring:
-  model: claude-opus-5-5
+  model: claude-haiku-4-5
   effort: low
   batch_size: 15
-  max_items_per_run: 150
+  max_items_per_run: 100
 notify:
-  min_score: 70
+  min_score: 60
   max_leads: 15
   telegram:
     enabled: true

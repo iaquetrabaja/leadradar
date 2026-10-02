@@ -11,6 +11,7 @@ Providers:
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -25,6 +26,18 @@ FRESHNESS = {
     "serper": {"day": "qdr:d", "week": "qdr:w", "month": "qdr:m"},
     "brave": {"day": "pd", "week": "pw", "month": "pm"},
 }
+
+
+def date_from_url(url: str) -> datetime | None:
+    """LinkedIn activity ids and X status ids embed their creation time (first 41 bits =
+    milliseconds), so search results without a date can still be filtered by age."""
+    m = re.search(r"(?:activity[-:]|ugcPost[-:]|share[-:])(\d{18,20})", url)
+    if m and "linkedin.com" in url:
+        return datetime.fromtimestamp((int(m.group(1)) >> 22) / 1000, tz=timezone.utc)
+    m = re.search(r"(?:x|twitter)\.com/[^/]+/status/(\d{15,20})", url)
+    if m:
+        return datetime.fromtimestamp(((int(m.group(1)) >> 22) + 1288834974657) / 1000, tz=timezone.utc)
+    return None
 
 
 def _site_label(url: str, sites: list[str]) -> str:
@@ -135,6 +148,7 @@ def collect(conf: dict, ctx) -> list[Item]:
                 created = datetime.fromisoformat(str(r["date"]).replace("Z", "+00:00"))
             except ValueError:
                 created = None
+        created = date_from_url(r["url"]) or created
         items.append(
             Item(
                 source=f"web:{_site_label(r['url'], sites)}",

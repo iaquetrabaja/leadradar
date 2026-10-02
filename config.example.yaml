@@ -1,5 +1,6 @@
-# LeadRadar config — copy to config.yaml (`leadradar init`) and make it yours.
-# Secrets (API keys, tokens) go in .env or GitHub Secrets, never here.
+# LeadRadar config. Tip: `leadradar init --describe "what you sell and to whom"`
+# writes this whole file for your trade. Secrets (API keys, tokens) go in .env or
+# GitHub Secrets, never here.
 
 profile:
   # What you sell. Be concrete: Claude scores every post against this.
@@ -43,21 +44,15 @@ exclude:
   - "full-time position"
   - "[for hire]"
 
-max_age_hours: 72        # ignore anything older than this
+# Only posts/offers from the last N hours. Every source is filtered by its real
+# publication date (Workana's "Hace 2 días", LinkedIn/X ids, API timestamps…).
+max_age_hours: 72
 
 sources:
+  # ── Free, no key needed ─────────────────────────────────────────────────
   hackernews:
     enabled: true
     queries: ["n8n", "zapier", "make.com", "ai automation", "looking for freelancer automation"]
-
-  reddit:
-    enabled: true
-    # Leave empty to search all of Reddit. Specific subs = higher quality.
-    subreddits: [smallbusiness, Entrepreneur, automation, n8n, zapier, freelance_forhire, spain, mexico]
-    global_search: true
-    # Keyless RSS is heavily rate-limited. Reddit closed self-service API keys in late 2025:
-    # if you already have REDDIT_CLIENT_ID / SECRET they're used; otherwise add reddit.com to
-    # web.sites, or use the agentreach source below.
 
   bluesky:
     enabled: true
@@ -68,49 +63,62 @@ sources:
     enabled: true
     queries: ["n8n", "zapier", "make.com automation", "ai chatbot", "ai automation"]
 
-  workana:               # Workana projects (Spain/LatAm) — needs `pip install "leadradar[stealth]"`
-    enabled: false
+  workana:               # Workana projects (Spain/LatAm) — needs the `stealth` extra (installed by default in CI)
+    enabled: true
     language: es
     queries: ["automatizacion", "n8n", "chatbot", "inteligencia artificial", "zapier"]
 
-  apify:                 # Reliable LinkedIn post search (no cookies) + any Apify actor. Needs APIFY_API_TOKEN.
-    enabled: false       # pay-per-result: ~$2 per 1,000 LinkedIn posts
-    max_per_query: 25
+  # ── One key (APIFY_API_TOKEN): LinkedIn + X + Reddit, no accounts/cookies ──
+  # Skipped automatically if the key is missing. Pay-per-result on your Apify
+  # account (the free plan includes monthly credit): LinkedIn ≈ $2/1k posts,
+  # X ≈ $0.40/1k tweets. max_per_query keeps each run to a few cents.
+  apify:
+    enabled: true
+    max_per_query: 10
+    x_lang: ""           # e.g. es — restrict X results to one language
     queries: ["busco automatizar", "recomendáis automatización", "necesito chatbot", "looking for automation expert", "need help n8n"]
     actors:
       - preset: linkedin
-      # - actor: apidojo/tweet-scraper       # any actor + your own field mapping
-      #   input: {searchTerms: "{queries}", maxItems: 25, sort: Latest}
-      #   fields: {url: url, text: text, author: author.userName, date: createdAt}
-      #   label: x.com
+      - preset: x
+      - preset: reddit
+      # Any other Apify actor works with your own field mapping:
+      # - actor: someuser/some-actor
+      #   input: {searchTerms: "{queries}", maxItems: 25}
+      #   fields: {url: url, text: text, author: author.name, date: createdAt}
+      #   label: example.com
 
-  agentreach:            # Reddit + X with YOUR logged-in session, via the CLIs Agent-Reach installs
-    enabled: false       # (rdt-cli, twitter-cli). Most results, but against Reddit/X automation terms:
-    reddit: true         # use a secondary account, low volumes, LOCAL only (never put cookies in CI).
-    x: true              # Setup: https://github.com/Panniantong/Agent-Reach
-    x_lang: ""           # e.g. es
-    max_per_query: 25
-
-  web:                   # LinkedIn, X, Quora, forums… via search engines (no login)
-    enabled: true
-    provider: ddgs       # ddgs (free, no key) | serper | brave | exa
+  # ── Optional extras ───────────────────────────────────────────────────────
+  web:                   # site: searches (Quora, Indie Hackers, forums…). Best with SERPER_API_KEY.
+    enabled: false
+    provider: serper     # serper (Google, 2,500 free queries) | ddgs (free, no key, noisy) | brave | exa
     sites:
-      - linkedin.com/posts
-      - x.com
       - quora.com
       - indiehackers.com
-      - reddit.com
+      - linkedin.com/posts
+      - x.com
     freshness: week      # day | week | month
     results_per_query: 10
     max_requests: 40     # safety cap on site×query searches per run
     region: es-es
 
+  reddit:                # keyless Reddit RSS — heavily rate-limited, blocked on GitHub Actions.
+    enabled: false       # Prefer the apify `reddit` preset. Uses REDDIT_CLIENT_ID/SECRET if you have them.
+    subreddits: [smallbusiness, Entrepreneur, automation, n8n, zapier, freelance_forhire, spain, mexico]
+    global_search: true
+
+  agentreach:            # Reddit + X with YOUR logged-in session, via the CLIs Agent-Reach installs
+    enabled: false       # (rdt-cli, twitter-cli). Against Reddit/X automation terms: secondary
+    reddit: true         # account, low volume, LOCAL only (never put cookies in CI).
+    x: true              # Setup: https://github.com/Panniantong/Agent-Reach
+    x_lang: ""
+    max_per_query: 25
+
   rss:                   # any RSS/Atom feed (job boards, Google Alerts, forums)
     enabled: false
-    feeds:
+    feeds: []
       # - { name: weworkremotely, url: "https://weworkremotely.com/remote-jobs.rss" }
 
-  scrape:                # any listing page via CSS selectors — needs `pip install "leadradar[stealth]"`
+  scrape:                # any listing page via CSS selectors (Scrapling)
     enabled: false
     pages: []
       # - name: mysite
@@ -119,16 +127,16 @@ sources:
       #   title: "h2"
       #   link: "a::attr(href)"
       #   text: ".description"
-      #   stealth: false   # true = stealth browser (Cloudflare-protected sites)
+      #   stealth: false   # true = stealth browser (Cloudflare); run `scrapling install` first
 
 scoring:
-  model: claude-opus-5-5   # any Claude model, e.g. claude-haiku-4-5 for lower cost
-  effort: low              # low | medium | high — low is plenty for triage
+  model: claude-haiku-4-5  # cheapest (~$0.005 per 15 posts). claude-sonnet-5-5 / claude-opus-5-5 write sharper drafts
+  effort: low              # Sonnet/Opus only: low | medium | high
   batch_size: 15           # posts per Claude call
-  max_items_per_run: 150   # cost cap; extra items wait for the next run
+  max_items_per_run: 100   # cost cap; extra items wait for the next run
 
 notify:
-  min_score: 70            # only notify leads at or above this score
+  min_score: 60            # 60+ = a buyer explicitly asking for help (vendors and chatter are capped below)
   max_leads: 15            # per run
   telegram:
     enabled: true
