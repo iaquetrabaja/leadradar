@@ -1,0 +1,143 @@
+# LeadRadar config — copy to config.yaml (`leadradar init`) and make it yours.
+# Secrets (API keys, tokens) go in .env or GitHub Secrets, never here.
+
+profile:
+  # What you sell. Be concrete: Claude scores every post against this.
+  offer: |
+    I build AI automations and agents for small businesses and freelancers:
+    connecting their tools (email, CRM, spreadsheets, WhatsApp, e-commerce) with
+    n8n / Make / Zapier and Claude/ChatGPT, customer-support chatbots, lead
+    follow-up, document processing, and hands-on AI training for teams.
+  ideal_client: |
+    Owners of small businesses, agencies, shops, clinics, consultants and
+    freelancers who want to save time with AI but don't have a technical team.
+    Spain, Latin America or remote English-speaking clients.
+  not_a_fit: |
+    Big enterprises looking for full-time employees, students asking for homework
+    help, people building their own AI startup, other agencies promoting services.
+  tone: "cercano, directo y útil; nada de venta agresiva"
+  signature: ""          # e.g. "— Ana · ana-automates.com"
+  report_language: es    # language of the summaries you receive (es | en | …)
+
+# Phrases your buyers would actually write. Mix languages freely.
+# Used by every source unless that source sets its own `queries` (keyword
+# APIs like Bluesky/HN find more with short terms — Claude filters intent).
+queries:
+  - "busco a alguien que automatice"
+  - "recomendáis alguna agencia de IA"
+  - "necesito ayuda con automatización"
+  - "busco freelance n8n"
+  - "alguien que me haga un chatbot"
+  - "automatizar mi negocio con IA"
+  - "looking for someone to automate"
+  - "need help with AI automation"
+  - "recommend an AI automation agency"
+  - "hire n8n developer"
+  - "looking for a zapier expert"
+  - "freelancer to build a chatbot"
+
+# Drop any candidate containing one of these (case-insensitive).
+exclude:
+  - "we are hiring"
+  - "estamos contratando"
+  - "full-time position"
+  - "[for hire]"
+
+max_age_hours: 72        # ignore anything older than this
+
+sources:
+  hackernews:
+    enabled: true
+    queries: ["n8n", "zapier", "make.com", "ai automation", "looking for freelancer automation"]
+
+  reddit:
+    enabled: true
+    # Leave empty to search all of Reddit. Specific subs = higher quality.
+    subreddits: [smallbusiness, Entrepreneur, automation, n8n, zapier, freelance_forhire, spain, mexico]
+    global_search: true
+    # Keyless RSS is heavily rate-limited. Reddit closed self-service API keys in late 2025:
+    # if you already have REDDIT_CLIENT_ID / SECRET they're used; otherwise add reddit.com to
+    # web.sites, or use the agentreach source below.
+
+  bluesky:
+    enabled: true
+    langs: [es, en]
+    queries: ["n8n", "zapier", "automatizar negocio", "automatizar IA", "chatbot negocio", "AI automation help", "recommend automation"]
+
+  freelancer:            # Freelancer.com open projects
+    enabled: true
+    queries: ["n8n", "zapier", "make.com automation", "ai chatbot", "ai automation"]
+
+  workana:               # Workana projects (Spain/LatAm) — needs `pip install "leadradar[stealth]"`
+    enabled: false
+    language: es
+    queries: ["automatizacion", "n8n", "chatbot", "inteligencia artificial", "zapier"]
+
+  apify:                 # Reliable LinkedIn post search (no cookies) + any Apify actor. Needs APIFY_API_TOKEN.
+    enabled: false       # pay-per-result: ~$2 per 1,000 LinkedIn posts
+    max_per_query: 25
+    queries: ["busco automatizar", "recomendáis automatización", "necesito chatbot", "looking for automation expert", "need help n8n"]
+    actors:
+      - preset: linkedin
+      # - actor: apidojo/tweet-scraper       # any actor + your own field mapping
+      #   input: {searchTerms: "{queries}", maxItems: 25, sort: Latest}
+      #   fields: {url: url, text: text, author: author.userName, date: createdAt}
+      #   label: x.com
+
+  agentreach:            # Reddit + X with YOUR logged-in session, via the CLIs Agent-Reach installs
+    enabled: false       # (rdt-cli, twitter-cli). Most results, but against Reddit/X automation terms:
+    reddit: true         # use a secondary account, low volumes, LOCAL only (never put cookies in CI).
+    x: true              # Setup: https://github.com/Panniantong/Agent-Reach
+    x_lang: ""           # e.g. es
+    max_per_query: 25
+
+  web:                   # LinkedIn, X, Quora, forums… via search engines (no login)
+    enabled: true
+    provider: ddgs       # ddgs (free, no key) | serper | brave | exa
+    sites:
+      - linkedin.com/posts
+      - x.com
+      - quora.com
+      - indiehackers.com
+      - reddit.com
+    freshness: week      # day | week | month
+    results_per_query: 10
+    max_requests: 40     # safety cap on site×query searches per run
+    region: es-es
+
+  rss:                   # any RSS/Atom feed (job boards, Google Alerts, forums)
+    enabled: false
+    feeds:
+      # - { name: weworkremotely, url: "https://weworkremotely.com/remote-jobs.rss" }
+
+  scrape:                # any listing page via CSS selectors — needs `pip install "leadradar[stealth]"`
+    enabled: false
+    pages: []
+      # - name: mysite
+      #   url: https://example.com/jobs?q=automation
+      #   item: ".job"
+      #   title: "h2"
+      #   link: "a::attr(href)"
+      #   text: ".description"
+      #   stealth: false   # true = stealth browser (Cloudflare-protected sites)
+
+scoring:
+  model: claude-opus-5-5   # any Claude model, e.g. claude-haiku-4-5 for lower cost
+  effort: low              # low | medium | high — low is plenty for triage
+  batch_size: 15           # posts per Claude call
+  max_items_per_run: 150   # cost cap; extra items wait for the next run
+
+notify:
+  min_score: 70            # only notify leads at or above this score
+  max_leads: 15            # per run
+  telegram:
+    enabled: true
+    notify_empty: false    # also message when a run finds nothing
+  discord:
+    enabled: false
+  slack:
+    enabled: false
+
+storage:
+  db_path: data/leadradar.db
+  output_dir: output       # leads.csv + leads.html land here

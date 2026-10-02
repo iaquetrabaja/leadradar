@@ -1,0 +1,76 @@
+name: LeadRadar
+
+on:
+  schedule:
+    - cron: "0 6,12,18 * * *" # 3 runs a day (UTC). Edit to taste.
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: leadradar
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check config
+        id: cfg
+        run: |
+          if [ -f config.yaml ]; then echo "ok=true" >> "$GITHUB_OUTPUT"
+          else echo "::notice::No config.yaml in this repo yet — copy config.example.yaml to config.yaml, edit and commit it."; echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+
+      - uses: actions/setup-python@v5
+        if: steps.cfg.outputs.ok == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        if: steps.cfg.outputs.ok == 'true'
+        run: pip install ".[stealth]"
+
+      # The SQLite db remembers what was already seen, so you never get the same lead twice.
+      - name: Restore memory
+        if: steps.cfg.outputs.ok == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: data
+          key: leadradar-db-${{ github.run_id }}
+          restore-keys: leadradar-db-
+
+      - name: Run LeadRadar
+        if: steps.cfg.outputs.ok == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
+          BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
+          EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          REDDIT_CLIENT_ID: ${{ secrets.REDDIT_CLIENT_ID }}
+          REDDIT_CLIENT_SECRET: ${{ secrets.REDDIT_CLIENT_SECRET }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: leadradar -c config.yaml run
+
+      - name: Save memory
+        if: always() && steps.cfg.outputs.ok == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data
+          key: leadradar-db-${{ github.run_id }}
+
+      - name: Upload report
+        if: always() && steps.cfg.outputs.ok == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: leads-report
+          path: output/
+          retention-days: 14
